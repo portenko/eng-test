@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, UseGuards, Req, ForbiddenException, Body, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Param, UseGuards, Req, ForbiddenException, Body, BadRequestException, NotFoundException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { GamesService } from './games.service';
 import { 
@@ -56,6 +56,16 @@ export class GamesController {
   async tap(@Body() body: TapRequest, @Req() req: { uuid: string, user: { sub: string, role: string } }): Promise<TapResponse> {
     if (!body.uuid) {
       throw new BadRequestException('UUID is required');
+    }
+
+    const round = await this.gamesService.getRoundByUuid(body.uuid);
+    if (!round) {
+      throw new NotFoundException('Round not found');
+    }
+
+    const now = new Date();
+    if (now < round.start_datetime || now > round.end_datetime) {
+      throw new BadRequestException('Round is not active');
     }
 
     const result = await this.gamesService.processTap(req.user.sub, body.uuid, req.user.role);

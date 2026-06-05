@@ -73,26 +73,28 @@ export class GamesService {
   }
 
   async processTap(userId: string, roundUuid: string, role: string): Promise<{ score: number }> {
-    if (role != 'nikita') {
-      // Обновить запись в таблице score
-      await this.scoreModel.increment('taps', {
-        by: 1,
-        where: {
-          user: userId,
-          round: roundUuid,
-        },
-      });
+    // Ensure a score record exists for this user/round pair before we touch counters
+    await this.scoreModel.findOrCreate({
+      where: { user: userId, round: roundUuid },
+      defaults: { user: userId, round: roundUuid, taps: 0 },
+    });
+
+    // Nikita's taps are silently ignored — return zeros
+    if (role === 'nikita') {
+      return { score: 0 };
     }
 
-      const scoreRecord = await this.scoreModel.findOne({
-        where: {
-          user: userId,
-          round: roundUuid,
-        },
-      });
-      const score = this.scoreFromTapsCount(scoreRecord.taps);
+    // Atomic UPDATE at DB level — safe when multiple backend instances share one DB
+    await this.scoreModel.increment('taps', {
+      by: 1,
+      where: { user: userId, round: roundUuid },
+    });
 
-      return { score };
+    const scoreRecord = await this.scoreModel.findOne({
+      where: { user: userId, round: roundUuid },
+    });
+
+    return { score: this.scoreFromTapsCount(scoreRecord!.taps) };
   }
 
   async getRoundSummary(roundUuid: string): Promise<{
